@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wellness Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <h1>Wellness Hub</h1>
+        <button id="close-sidebar-btn" class="sidebar-close-btn" aria-label="Close sidebar">&times;</button>
+      </div>
+
+      <div class="sidebar-user-panel">
+        <div class="sidebar-user-top">
+          <div class="user-avatar">U</div>
+          <div class="user-info">
+            <p id="current-username-label">User</p>
+            <span id="user-id-label">id: --</span>
+          </div>
+        </div>
+        <div class="sidebar-user-actions">
+          <button id="logout-btn" class="delete-data-btn" type="button">Logout</button>
+          <button id="delete-data-btn" class="delete-data-btn" type="button">Delete My Data</button>
+        </div>
+        <div class="theme-switcher">
+          <p>Theme</p>
+          <div class="theme-buttons">
+            <button type="button" class="theme-btn" data-theme-choice="light">Light</button>
+            <button type="button" class="theme-btn" data-theme-choice="calm">Calm</button>
+            <button type="button" class="theme-btn" data-theme-choice="warm">Warm</button>
+            <button type="button" class="theme-btn" data-theme-choice="dark">Dark</button>
+          </div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button onclick="switchView('dashboard')" id="nav-dashboard" class="nav-item active"><span>◻</span>Dashboard</button>
+        <button onclick="switchView('chat')" id="nav-chat" class="nav-item"><span>◔</span>Chat</button>
+        <button onclick="switchView('mood')" id="nav-mood" class="nav-item"><span>☺</span>Mood</button>
+        <button onclick="switchView('music')" id="nav-music" class="nav-item"><span>♫</span>Music</button>
+        <button onclick="switchView('games')" id="nav-games" class="nav-item"><span>⌾</span>Games</button>
+      </nav>
+
+      <div class="sidebar-bottom-actions">
+        <button id="view-report-btn" class="nav-item secondary"><span>📊</span>Report View</button>
+        <button id="download-report-btn" class="nav-item secondary"><span>📥</span>Download PDF</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="mobile-header">
+        <button id="open-sidebar-btn" class="menu-btn" aria-label="Open sidebar">&#9776;</button>
+        <h1>Wellness Hub</h1>
+      </header>
+
+      <div class="content-wrapper">
+        <section id="view-dashboard" class="view active">
+          <header class="view-header">
+            <h2>Dashboard</h2>
+            <p>Welcome back! Here's your activity overview.</p>
+          </header>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <p>Messages Today</p>
+              <h3 id="stat-messages">0</h3>
+              <span class="positive" id="stat-messages-delta">+0</span>
+            </article>
+            <article class="stat-card">
+              <p>Mood Score</p>
+              <h3 id="stat-mood-score">0.0</h3>
+              <span class="positive" id="stat-mood-delta">+0.0</span>
+            </article>
+            <article class="stat-card">
+              <p>Songs Played</p>
+              <h3 id="stat-songs">0</h3>
+              <span class="positive" id="stat-songs-delta">+0</span>
+            </article>
+            <article class="stat-card">
+              <p>Games Completed</p>
+              <h3 id="stat-games">0</h3>
+              <span class="positive" id="stat-games-delta">+0</span>
+            </article>
+          </div>
+
+          <div class="dashboard-insights">
+            <section class="panel meter-panel">
+              <h3>Mood Meter</h3>
+              <div id="dashboard-meter-ring" class="meter-ring">
+                <div class="meter-inner">
+                  <strong id="dashboard-meter-value">60</strong>
+                  <span>/100</span>
+                </div>
+              </div>
+              <p id="dashboard-meter-label" class="meter-label">Steady</p>
+            </section>
+
+            <section class="panel graph-panel">
+              <div class="graph-head">
+                <h3>Mood Trend</h3>
+                <span id="dashboard-mood-avg">Avg 0</span>
+              </div>
+              <div class="graph-canvas-wrap">
+                <canvas id="dashboard-mood-chart" aria-label="Mood risk over time"></canvas>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <h3>Recent Activity</h3>
+            <div id="activity-list"></div>
+          </section>
+        </section>
+
+        <section id="view-chat" class="view">
+          <header class="view-header">
+            <h2>Chat</h2>
+            <p>Have a conversation with your wellness assistant.</p>
+            <div class="chat-tools">
+              <button id="tts-toggle" class="tool-btn" type="button" aria-pressed="true">Voice: On</button>
+              <button id="chat-continue-btn" class="tool-btn hidden" type="button">Continue ⟳</button>
+              <div id="chat-mood-monitor" class="chat-mood-monitor">Mood: -- | Risk: --</div>
+            </div>
+          </header>
+
+          <section class="panel chat-shell">
+            <div id="chat-api-indicator" class="chat-api-indicator hidden">
+              Safe mode: using supportive fallback replies.
+            </div>
+            <div id="chat-fixed-replies" class="chat-fixed-replies hidden"></div>
+            <div id="chat-messages" class="chat-messages">
+            </div>
+
+            <form id="chat-form" class="chat-input-area">
+              <input id="chat-input" type="text" placeholder="Type your message..." autocomplete="off">
+              <button id="stt-btn" type="button" title="Speech to text">🎤</button>
+              <button id="chat-send-btn" type="button">➤</button>
+            </form>
+          </section>
+        </section>
+
+        <section id="view-mood" class="view">
+          <header class="view-header">
+            <h2>Mood Tracker</h2>
+            <p>How are you feeling right now?</p>
+          </header>
+
+          <div class="mood-grid">
+            <section class="panel mood-card">
+              <div id="mood-emoji" class="mood-emoji">◔</div>
+              <h3 id="mood-label">Okay</h3>
+              <input id="mood-range" type="range" min="0" max="100" value="50">
+              <div class="range-labels">
+                <span>Poor</span>
+                <span>Okay</span>
+                <span>Excellent</span>
+              </div>
+              <textarea id="mood-note" placeholder="Add a note about your mood (optional)"></textarea>
+              <button id="save-mood-btn" class="solid-btn">Save Mood</button>
+            </section>
+
+            <section class="panel">
+              <h3>Mood History</h3>
+              <div id="mood-history" class="history-list">
+                <article class="history-card">
+                  <header><span>March 30, 2:00 PM</span><strong>75/100</strong></header>
+                  <div class="bar"><span style="width:75%"></span></div>
+                  <p>Feeling energized after a walk</p>
+                </article>
+                <article class="history-card">
+                  <header><span>March 30, 10:30 AM</span><strong>60/100</strong></header>
+                  <div class="bar"><span style="width:60%"></span></div>
+                  <p>Good morning mood</p>
+                </article>
+                <article class="history-card">
+                  <header><span>March 29, 8:00 PM</span><strong>85/100</strong></header>
+                  <div class="bar"><span style="width:85%;background:#41b36b"></span></div>
+                  <p>Great day overall</p>
+                </article>
+              </div>
+            </section>
+
+            <section class="panel quotes-panel">
+              <h3>Wellness Quotes</h3>
+              <div id="mood-quote-container" class="quote-container">
+                <p id="mood-quote-text">"Your mental health is a priority. Your happiness is an essential. Your self-care is a necessity."</p>
+                <small id="mood-quote-author">— Unknown</small>
+              </div>
+            </section>
+
+            <section class="panel tips-panel">
+              <h3>Daily Wellness Tips</h3>
+              <ul id="wellness-tips-list" class="tips-list">
+                <li>Take a 5-minute walk outside</li>
+                <li>Drink a glass of water now</li>
+                <li>Write down three things you're grateful for</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-music" class="view">
+          <header class="view-header">
+            <h2>Music</h2>
+            <p>Discover playlists to match your mood.</p>
+          </header>
+
+          <section class="panel player-panel">
+            <div class="player-head">
+              <h3>Relaxing Sound Player</h3>
+              <span id="loop-status">Loop: On</span>
+            </div>
+            <div class="sound-list">
+              <article class="sound-item">
+                <div>
+                  <h4>Rain</h4>
+                  <p>Soft rain ambience for relaxation</p>
+                </div>
+                <button class="sound-toggle" data-sound="rain" type="button">Play</button>
+              </article>
+              <article class="sound-item">
+                <div>
+                  <h4>Ocean</h4>
+                  <p>Rolling ocean waves and breeze</p>
+                </div>
+                <button class="sound-toggle" data-sound="ocean" type="button">Play</button>
+              </article>
+              <article class="sound-item">
+                <div>
+                  <h4>Piano</h4>
+                  <p>Gentle looping piano melody</p>
+                </div>
+                <button class="sound-toggle" data-sound="piano" type="button">Play</button>
+              </article>
+            </div>
+          </section>
+
+          <h3 class="section-title">Featured Playlists</h3>
+          <div class="music-grid">
+            <article class="music-card clickable" onclick="window.openPlaylist('calm')">
+              <img src="https://source.unsplash.com/1000x1200/?rain,relax" alt="Rain ambience music"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/rainmusic/1000/1200';">
+              <div class="content">
+                <h4>Calm Vibes</h4>
+                <p>Relaxing tunes for a peaceful mind</p>
+                <small>View Tracks ☰</small>
+              </div>
+            </article>
+            <article class="music-card clickable" onclick="window.openPlaylist('energy')">
+              <img src="https://source.unsplash.com/1000x1200/?ocean,waves,calm" alt="Ocean ambience music"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/oceanmusic/1000/1200';">
+              <div class="content">
+                <h4>Energy Boost</h4>
+                <p>Uplifting songs to energize your day</p>
+                <small>View Tracks ☰</small>
+              </div>
+            </article>
+            <article class="music-card clickable" onclick="window.openPlaylist('meditation')">
+              <img src="https://source.unsplash.com/1000x1200/?piano,music,studio" alt="Piano relaxation music"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/pianomusic/1000/1200';">
+              <div class="content">
+                <h4>Meditation</h4>
+                <p>Peaceful sounds for mindfulness</p>
+                <small>View Tracks ☰</small>
+              </div>
+            </article>
+          </div>
+
+          <!-- Playlist Explorer Modal -->
+          <div id="playlist-explorer" class="playlist-explorer hidden">
+            <div class="explorer-content">
+              <header class="explorer-header">
+                <h2 id="explorer-title">Playlist</h2>
+                <button id="close-explorer" class="close-btn">&times;</button>
+              </header>
+              <div class="explorer-body">
+                <div class="now-playing-container">
+                  <iframe id="main-yt-player" src="" frameborder="0" allowfullscreen></iframe>
+                </div>
+                <div class="song-list-container">
+                  <h3>Available Tracks</h3>
+                  <ul id="song-list" class="song-list">
+                    <!-- Songs will be injected here -->
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section class="panel youtube-music-panel">
+            <h3>YouTube Non-Copyright Music</h3>
+            <p>Play relaxing non-copyright tracks directly from YouTube.</p>
+            <div class="yt-grid">
+              <iframe
+                src="https://www.youtube.com/embed/jfKfPfyJRdk"
+                title="Lofi Hip Hop Radio"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen></iframe>
+              <iframe
+                src="https://www.youtube.com/embed/5qap5aO4i9A"
+                title="Relaxing Rain Music"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen></iframe>
+              <iframe
+                src="https://www.youtube.com/embed/77ZozI0rw7w"
+                title="Deep Meditation Music"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen></iframe>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-games" class="view">
+          <header class="view-header">
+            <h2>Games</h2>
+            <p>Play relaxing games to boost your mental wellness.</p>
+          </header>
+
+          <div class="games-grid">
+            <article class="game-card">
+              <img src="https://source.unsplash.com/1200x700/?puzzle,pieces,brain" alt="Mind puzzle game"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/puzzlegame/1200/700';">
+              <div class="overlay"><label>Medium</label><h4>Mind Puzzle</h4></div>
+              <div class="game-body">
+                <p>Challenge your brain with relaxing puzzles</p>
+                <button class="game-launch-btn" data-game="mind-puzzle" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://source.unsplash.com/1200x700/?cards,matching,game" alt="Mindful match game"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/matchgame/1200/700';">
+              <div class="overlay"><label>Easy</label><h4>Mindful Match</h4></div>
+              <div class="game-body">
+                <p>Memory game to improve focus and attention</p>
+                <button class="game-launch-btn" data-game="mindful-match" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://source.unsplash.com/1200x700/?meditation,breathing,calm" alt="Breathing game"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/breathegame/1200/700';">
+              <div class="overlay"><label>Easy</label><h4>Breathe & Focus</h4></div>
+              <div class="game-body">
+                <p>Guided breathing exercises with visual cues</p>
+                <button class="game-launch-btn" data-game="breathe-focus" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://source.unsplash.com/1200x700/?zen,stones,peaceful" alt="Zen garden game"
+                onerror="this.onerror=null;this.src='https://picsum.photos/seed/zengame/1200/700';">
+              <div class="overlay"><label>Easy</label><h4>Zen Garden</h4></div>
+              <div class="game-body">
+                <p>Create peaceful patterns in a virtual garden</p>
+                <button class="game-launch-btn" data-game="zen-garden" type="button">Play</button>
+              </div>
+            </article>
+
+            <!-- New Games -->
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1200&q=80" alt="Reaction tap game">
+              <div class="overlay"><label>Hackathon</label><h4>Reaction Tap</h4></div>
+              <div class="game-body">
+                <p>Test your focus and reaction speed</p>
+                <button class="game-launch-btn" data-game="reaction-tap" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80" alt="Thought reframing game">
+              <div class="overlay"><label>⭐ Priority</label><h4>Thought Reframing</h4></div>
+              <div class="game-body">
+                <p>Convert negative thoughts to positive ones</p>
+                <button class="game-launch-btn" data-game="thought-reframing" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=1200&q=80" alt="Free drawing canvas">
+              <div class="overlay"><label>Creative</label><h4>Zen Canvas</h4></div>
+              <div class="game-body">
+                <p>Free drawing for creative relaxation</p>
+                <button class="game-launch-btn" data-game="zen-canvas" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80" alt="Rhythm tap game">
+              <div class="overlay"><label>Rhythm</label><h4>Rhythm Tap</h4></div>
+              <div class="game-body">
+                <p>Tap along with a calming beat</p>
+                <button class="game-launch-btn" data-game="rhythm-tap" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1200&q=80" alt="Balloon breathing game">
+              <div class="overlay"><label>Calm</label><h4>Balloon Breather</h4></div>
+              <div class="game-body">
+                <p>Inflate the balloon with your breath</p>
+                <button class="game-launch-btn" data-game="balloon-breather" type="button">Play</button>
+              </div>
+            </article>
+
+            <!-- Even More Games -->
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1499209974431-9dac3adaf471?auto=format&fit=crop&w=1200&q=80" alt="Box breathing">
+              <div class="overlay"><label>Calm</label><h4>Box Breathing</h4></div>
+              <div class="game-body">
+                <p>4-4-4-4 rhythm for instant calm</p>
+                <button class="game-launch-btn" data-game="box-breathing" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?auto=format&fit=crop&w=1200&q=80" alt="Affirmation swipe">
+              <div class="overlay"><label>⭐ Priority</label><h4>Affirmation Swipe</h4></div>
+              <div class="game-body">
+                <p>Swipe through positive affirmations</p>
+                <button class="game-launch-btn" data-game="affirmation-swipe" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=1200&q=80" alt="Gratitude journal">
+              <div class="overlay"><label>Mood</label><h4>Gratitude Journal</h4></div>
+              <div class="game-body">
+                <p>Write 3 things you're grateful for</p>
+                <button class="game-launch-btn" data-game="gratitude-journal" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1416870230247-d0e9a02c6761?auto=format&fit=crop&w=1200&q=80" alt="Water a plant">
+              <div class="overlay"><label>Nature</label><h4>Water a Plant</h4></div>
+              <div class="game-body">
+                <p>Daily care for your virtual plant 🌱</p>
+                <button class="game-launch-btn" data-game="water-plant" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1200&q=80" alt="Find the odd object">
+              <div class="overlay"><label>Focus</label><h4>Find the Odd</h4></div>
+              <div class="game-body">
+                <p>Spot the odd object in the grid</p>
+                <button class="game-launch-btn" data-game="find-odd" type="button">Play</button>
+              </div>
+            </article>
+
+            <!-- Even More Games Continued -->
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=1200&q=80" alt="Mandala coloring">
+              <div class="overlay"><label>Creative</label><h4>Mandala Color</h4></div>
+              <div class="game-body">
+                <p>Fill beautiful mandalas with color</p>
+                <button class="game-launch-btn" data-game="mandala-coloring" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1518113161404-f58c4998822d?auto=format&fit=crop&w=1200&q=80" alt="Arrange shapes">
+              <div class="overlay"><label>Puzzle</label><h4>Shape Arrange</h4></div>
+              <div class="game-body">
+                <p>Fit the geometric shapes together</p>
+                <button class="game-launch-btn" data-game="shape-arrange" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1513258496099-48168024adb0?auto=format&fit=crop&w=1200&q=80" alt="Positive thinking quiz">
+              <div class="overlay"><label>Thought</label><h4>Positive Quiz</h4></div>
+              <div class="game-body">
+                <p>Test your optimistic mindset</p>
+                <button class="game-launch-btn" data-game="positive-quiz" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1514316454349-750a7fd3da3a?auto=format&fit=crop&w=1200&q=80" alt="Create relaxing beat">
+              <div class="overlay"><label>Rhythm</label><h4>Relaxing Beats</h4></div>
+              <div class="game-body">
+                <p>Compose your own calming music</p>
+                <button class="game-launch-btn" data-game="relaxing-beats" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?auto=format&fit=crop&w=1200&q=80" alt="Grow a tree">
+              <div class="overlay"><label>Nature</label><h4>Grow a Tree</h4></div>
+              <div class="game-body">
+                <p>Nurture a tree from seed to canopy</p>
+                <button class="game-launch-btn" data-game="grow-tree" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1520333789090-1afc82db536a?auto=format&fit=crop&w=1200&q=80" alt="Random compliment generator">
+              <div class="overlay"><label>Mood</label><h4>Compliment Generator</h4></div>
+              <div class="game-body">
+                <p>Receive a random boost of kindness</p>
+                <button class="game-launch-btn" data-game="compliment-gen" type="button">Play</button>
+              </div>
+            </article>
+            <article class="game-card">
+              <img src="https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80" alt="Daily positivity challenge">
+              <div class="overlay"><label>Mood</label><h4>Positivity Challenge</h4></div>
+              <div class="game-body">
+                <p>A simple daily task to stay positive</p>
+                <button class="game-launch-btn" data-game="positivity-challenge" type="button">Play</button>
+              </div>
+            </article>
+          </div>
+
+          <section id="game-workspace" class="panel game-workspace hidden">
+            <div class="game-workspace-head">
+              <div>
+                <h3 id="game-workspace-title">Game</h3>
+                <p id="game-workspace-subtitle">Relax and play.</p>
+              </div>
+              <button id="game-workspace-close" class="tool-btn" type="button">Close</button>
+            </div>
+
+            <div id="game-screen-mind-puzzle" class="game-screen hidden">
+              <div class="game-meta-line">
+                <span id="mind-puzzle-moves">Moves: 0</span>
+                <button id="mind-puzzle-reset" class="tool-btn" type="button">Shuffle</button>
+              </div>
+              <div id="mind-puzzle-grid" class="mind-puzzle-grid"></div>
+              <p id="mind-puzzle-message" class="game-message">Arrange tiles 1 to 8 in order.</p>
+            </div>
+
+            <div id="game-screen-mindful-match" class="game-screen hidden">
+              <div class="game-meta-line">
+                <span id="mindful-match-stats">Moves: 0 | Matches: 0/8</span>
+                <button id="mindful-match-reset" class="tool-btn" type="button">Restart</button>
+              </div>
+              <div id="mindful-match-grid" class="mindful-match-grid"></div>
+            </div>
+
+            <div id="game-screen-zen-garden" class="game-screen hidden">
+              <div class="game-meta-line">
+                <div class="zen-tools">
+                  <button class="tool-btn zen-tool active" data-zen-tool="rake" type="button">Rake</button>
+                  <button class="tool-btn zen-tool" data-zen-tool="stone" type="button">Place Stone</button>
+                  <button class="tool-btn zen-tool" data-zen-tool="erase" type="button">Clear</button>
+                </div>
+              </div>
+              <div id="zen-garden-board" class="zen-garden-board">
+                <svg id="zen-garden-lines" class="zen-garden-lines"></svg>
+              </div>
+              <p class="game-message">Draw calm sand lines or place stones.</p>
+            </div>
+
+            <div id="game-screen-reaction-tap" class="game-screen hidden text-center">
+              <div class="game-meta-line">
+                <span id="reaction-score">Score: 0</span>
+                <span id="reaction-best">Best: 0ms</span>
+              </div>
+              <div id="reaction-area" class="reaction-area">
+                <p id="reaction-prompt">Wait for Green...</p>
+              </div>
+            </div>
+
+            <div id="game-screen-thought-reframing" class="game-screen hidden">
+              <div class="reframing-container">
+                <p class="game-message">Convert a negative thought into a positive one.</p>
+                <div class="thought-input-group">
+                  <label>Negative Thought:</label>
+                  <input type="text" id="negative-thought" placeholder="e.g., I'm not good enough">
+                </div>
+                <div class="thought-input-group">
+                  <label>Positive Reframe:</label>
+                  <input type="text" id="positive-thought" placeholder="e.g., I am learning and growing every day">
+                </div>
+                <button id="reframe-btn" class="solid-btn">Save Reframe</button>
+                <div id="reframe-history" class="reframe-history mt-4"></div>
+              </div>
+            </div>
+
+            <div id="game-screen-zen-canvas" class="game-screen hidden">
+              <div class="game-meta-line">
+                <div class="canvas-tools">
+                  <input type="color" id="canvas-color" value="#3766ea">
+                  <button id="canvas-clear" class="tool-btn">Clear</button>
+                </div>
+              </div>
+              <canvas id="zen-drawing-canvas" class="zen-canvas"></canvas>
+            </div>
+
+            <div id="game-screen-rhythm-tap" class="game-screen hidden text-center">
+              <div class="game-meta-line">
+                <span id="rhythm-score">Score: 0</span>
+              </div>
+              <div class="rhythm-track">
+                <div id="rhythm-beat" class="rhythm-beat"></div>
+                <button id="rhythm-target" class="rhythm-target">Tap!</button>
+              </div>
+              <p class="game-message">Tap when the circle matches the ring!</p>
+            </div>
+
+            <div id="game-screen-balloon-breather" class="game-screen hidden text-center">
+              <div class="balloon-container">
+                <div id="balloon" class="balloon"></div>
+              </div>
+              <p id="balloon-instruction" class="game-message">Hold SPACE to inhale (inflate), Release to exhale</p>
+            </div>
+
+            <div id="game-screen-box-breathing" class="game-screen hidden text-center">
+              <div class="box-breathing-container">
+                <div id="box-breathing-circle" class="box-breathing-circle"></div>
+                <p id="box-breathing-phase" class="game-message">Press start</p>
+                <div class="timer-config mb-4">
+                  <label for="box-breathing-duration">Minutes:</label>
+                  <input type="number" id="box-breathing-duration" value="1" min="1" max="10" class="mini-input">
+                </div>
+                <p id="box-breathing-timer" class="game-timer">00:00</p>
+              </div>
+              <button id="box-breathing-start" class="solid-btn">Start Session</button>
+            </div>
+
+            <div id="game-screen-affirmation-swipe" class="game-screen hidden">
+              <div class="swipe-container">
+                <div id="affirmation-card" class="affirmation-card">
+                  <p id="affirmation-text">You are capable of amazing things.</p>
+                </div>
+                <div class="swipe-actions">
+                  <button id="swipe-left" class="tool-btn">Next</button>
+                  <button id="swipe-right" class="solid-btn">Love this!</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="game-screen-gratitude-journal" class="game-screen hidden">
+              <div class="gratitude-container">
+                <p class="game-message">Write down 3 things you're grateful for today.</p>
+                <div class="gratitude-inputs">
+                  <input type="text" class="gratitude-input" placeholder="1. Something that made you smile">
+                  <input type="text" class="gratitude-input" placeholder="2. A person you're thankful for">
+                  <input type="text" class="gratitude-input" placeholder="3. Something you achieved">
+                </div>
+                <button id="save-gratitude-btn" class="solid-btn">Save Journal</button>
+                <div id="gratitude-history" class="reframe-history mt-4"></div>
+              </div>
+            </div>
+
+            <div id="game-screen-water-plant" class="game-screen hidden text-center">
+              <div class="plant-container">
+                <div id="plant" class="plant stage-1">🌱</div>
+                <div id="plant-pot" class="plant-pot"></div>
+              </div>
+              <p id="plant-message" class="game-message">Your plant is thirsty!</p>
+              <button id="water-plant-btn" class="solid-btn">Water Plant 💧</button>
+            </div>
+
+            <div id="game-screen-find-odd" class="game-screen hidden">
+              <div class="game-meta-line">
+                <span id="find-odd-score">Score: 0</span>
+                <span id="find-odd-timer">Time: 30s</span>
+              </div>
+              <div id="find-odd-grid" class="find-odd-grid"></div>
+              <p id="find-odd-message" class="game-message">Find the different object!</p>
+            </div>
+
+            <div id="game-screen-mandala-coloring" class="game-screen hidden">
+              <div class="mandala-container">
+                <div class="canvas-tools">
+                  <input type="color" id="mandala-color" value="#3766ea">
+                  <button id="mandala-clear" class="tool-btn">Reset</button>
+                </div>
+                <div id="mandala-svg-container" class="mandala-svg-container">
+                  <!-- SVG Mandala will be injected here -->
+                </div>
+              </div>
+            </div>
+
+            <div id="game-screen-shape-arrange" class="game-screen hidden">
+              <div class="shape-container">
+                <p class="game-message">Drag and drop the shapes to fit the frame.</p>
+                <div id="shape-frame" class="shape-frame"></div>
+                <div id="shape-pieces" class="shape-pieces"></div>
+              </div>
+            </div>
+
+            <div id="game-screen-positive-quiz" class="game-screen hidden">
+              <div class="quiz-container">
+                <div id="quiz-question" class="quiz-question">Question goes here?</div>
+                <div id="quiz-options" class="quiz-options"></div>
+                <p id="quiz-feedback" class="game-message"></p>
+              </div>
+            </div>
+
+            <div id="game-screen-relaxing-beats" class="game-screen hidden">
+              <div class="beats-container">
+                <p class="game-message">Tap the pads to create your own calming rhythm.</p>
+                <div class="beats-grid">
+                  <button class="beat-pad" data-note="C4">Pad 1</button>
+                  <button class="beat-pad" data-note="E4">Pad 2</button>
+                  <button class="beat-pad" data-note="G4">Pad 3</button>
+                  <button class="beat-pad" data-note="B4">Pad 4</button>
+                  <button class="beat-pad" data-note="C5">Pad 5</button>
+                  <button class="beat-pad" data-note="D5">Pad 6</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="game-screen-grow-tree" class="game-screen hidden text-center">
+              <div class="tree-container">
+                <div id="tree" class="tree stage-0">🌱</div>
+              </div>
+              <p id="tree-message" class="game-message">Your tree needs care to grow.</p>
+              <div class="tree-actions">
+                <button id="tree-water-btn" class="tool-btn">Water 💧</button>
+                <button id="tree-sun-btn" class="tool-btn">Sun ☀️</button>
+              </div>
+            </div>
+
+            <div id="game-screen-compliment-gen" class="game-screen hidden text-center">
+              <div class="compliment-card card">
+                <p id="compliment-text" class="text-xl font-bold">You're doing great!</p>
+              </div>
+              <button id="gen-compliment-btn" class="solid-btn mt-4">Get New Compliment</button>
+            </div>
+
+            <div id="game-screen-positivity-challenge" class="game-screen hidden">
+              <div class="challenge-container card">
+                <h4 id="challenge-title" class="font-bold mb-2">Daily Task</h4>
+                <p id="challenge-desc">Smile at 3 strangers today.</p>
+                <button id="complete-challenge-btn" class="solid-btn mt-4">Mark as Done</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel breathing-panel">
+            <div class="breathing-meta">
+              <h3>Breathing Exercise</h3>
+              <p>Follow the circle for one minute.</p>
+              <div id="breathing-phase" class="breathing-phase">Press start</div>
+              <div id="breathing-timer" class="breathing-timer">01:00</div>
+              <button id="breathing-start" class="solid-btn" type="button">Start 1-Minute Session</button>
+            </div>
+            <div class="breathing-stage">
+              <div id="breathing-circle" class="breathing-circle">
+                <span>Breathe</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h3>Achievements</h3>
+            <div class="achievement">First Game <span>Completed your first game</span></div>
+            <div class="achievement">Week Streak <span>Played 7 days in a row</span></div>
+          </section>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="mobile-overlay" class="mobile-overlay"></div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
