@@ -12,7 +12,12 @@ const { authGate, requirePageAuth } = require("./middleware/auth");
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: true,
+    credentials: true
+  })
+);
 app.use(express.json());
 app.use(
   session({

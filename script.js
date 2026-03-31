@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatInput = document.getElementById("chat-input");
   const chatSendBtn = document.getElementById("chat-send-btn");
   const chatMessages = document.getElementById("chat-messages");
+  const chatCharacterOverlay = document.getElementById("chat-character-overlay");
   const chatMoodMonitor = document.getElementById("chat-mood-monitor");
   const chatApiIndicator = document.getElementById("chat-api-indicator");
   const chatFixedReplies = document.getElementById("chat-fixed-replies");
@@ -33,6 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const breathingCircle = document.getElementById("breathing-circle");
   const breathingPhase = document.getElementById("breathing-phase");
   const breathingTimer = document.getElementById("breathing-timer");
+  const breathingAudioEnabledInput = document.getElementById("breathing-audio-enabled");
+  const breathingAudioFileInput = document.getElementById("breathing-audio-file");
+  const breathingAudioApplyBtn = document.getElementById("breathing-audio-apply");
+  const DEFAULT_BREATHING_AUDIO_URL = "/assets/audio/default-breathing-theme.mp3";
   const soundButtons = Array.from(document.querySelectorAll(".sound-toggle"));
   const loopStatus = document.getElementById("loop-status");
   const currentUsernameLabel = document.getElementById("current-username-label");
@@ -65,9 +70,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const zenGardenLines = document.getElementById("zen-garden-lines");
   const zenToolButtons = Array.from(document.querySelectorAll(".zen-tool"));
 
-  const API_BASE = "";
+  const runningOnLocalhost =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  const defaultLocalApiBase =
+    runningOnLocalhost && !["5000", "5001"].includes(window.location.port)
+      ? "http://localhost:5000"
+      : "";
+  const API_BASE = localStorage.getItem("wellness_api_base") || defaultLocalApiBase;
   let currentUser = null;
-  let moodTrend = [54, 61, 58, 66, 72, 68, 60];
+  let moodTrend = [];
+  let moodTrendLabels = [];
+  let latestMood = null;
+  let latestHistory = [];
   let ttsEnabled = true;
   let recognition = null;
   let isListening = false;
@@ -78,6 +92,15 @@ document.addEventListener("DOMContentLoaded", () => {
   let soundBuffers = null;
   let activeSoundId = null;
   let activeSoundSource = null;
+  let breathingThemeNodes = null;
+  let breathingThemeAudio = null;
+  let breathingThemeBufferSource = null;
+  let breathingThemeBufferGain = null;
+  let breathingYtPlayer = null;
+  let breathingYtHost = null;
+  let youtubeApiReadyPromise = null;
+  let breathingCustomAudioUrl = null;
+  let breathingThemeEnabled = localStorage.getItem("wellness_breathing_theme_enabled") !== "false";
   let moodChart = null;
   let userTheme = localStorage.getItem("wellness_theme") || "light";
   let voiceProfile = loadVoiceProfile();
@@ -95,6 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastChatRisk = null;
   let lastCheckinTurn = -10;
   let assistantTurnCount = 0;
+  let breathingOfferPending = false;
 
   // New Games State
   let reactionTimer = null;
@@ -137,6 +161,53 @@ document.addEventListener("DOMContentLoaded", () => {
       ]
     }
   };
+
+  function buildGamePlaceholder(title) {
+    const safeTitle = (title || "Wellness Game").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#0f2a43"/>
+          <stop offset="100%" stop-color="#25517a"/>
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="700" fill="url(#g)"/>
+      <circle cx="150" cy="140" r="90" fill="rgba(255,255,255,0.12)"/>
+      <circle cx="1040" cy="560" r="130" fill="rgba(255,255,255,0.1)"/>
+      <text x="70" y="360" fill="#ffffff" font-size="74" font-family="Segoe UI, Arial, sans-serif" font-weight="700">${safeTitle}</text>
+      <text x="70" y="428" fill="rgba(255,255,255,0.88)" font-size="34" font-family="Segoe UI, Arial, sans-serif">Wellness Hub</text>
+    </svg>`;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  }
+
+  function setupGameCardImages() {
+    const gameImages = Array.from(document.querySelectorAll(".game-card img"));
+    gameImages.forEach((img, index) => {
+      const title =
+        img.closest(".game-card")?.querySelector(".overlay h4")?.textContent?.trim() ||
+        img.alt ||
+        `Game ${index + 1}`;
+      const seed = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const fallbackPhoto = `https://picsum.photos/seed/${seed}/1200/700`;
+      const placeholder = buildGamePlaceholder(title);
+
+      const applyFallback = () => {
+        if (img.dataset.fallbackApplied === "1") return;
+        img.dataset.fallbackApplied = "1";
+        img.src = fallbackPhoto;
+        img.onerror = () => {
+          img.onerror = null;
+          img.src = placeholder;
+        };
+      };
+
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.referrerPolicy = "no-referrer";
+      img.addEventListener("error", applyFallback, { once: true });
+      if (img.complete && img.naturalWidth === 0) applyFallback();
+    });
+  }
 
   window.openPlaylist = (type) => {
     const data = playlistsData[type];
@@ -191,6 +262,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (openSidebarBtn) openSidebarBtn.addEventListener("click", openSidebar);
   if (closeSidebarBtn) closeSidebarBtn.addEventListener("click", closeSidebar);
   mobileOverlay.addEventListener("click", closeSidebar);
+  setupGameCardImages();
 
   window.switchView = (viewId) => {
     document.querySelectorAll(".view").forEach((view) => {
@@ -311,10 +383,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function updateMoodScoreStatFromRiskTrend(riskValues) {
-    const safeValues = riskValues.length ? riskValues : [50];
-    const avgRisk = safeValues.reduce((sum, value) => sum + value, 0) / safeValues.length;
-    const nextScore = Number((avgRisk / 10).toFixed(1));
+  function updateMoodScoreStatFromMoodTrend(moodValues) {
+    const safeValues = moodValues.length ? moodValues : [50];
+    const avgMood = safeValues.reduce((sum, value) => sum + value, 0) / safeValues.length;
+    const nextScore = Number((avgMood / 10).toFixed(1));
     const delta = Number((nextScore - appState.stats.moodScore).toFixed(1));
     appState.stats.moodScore = nextScore;
     appState.deltas.moodScore = Number((appState.deltas.moodScore + delta).toFixed(1));
@@ -324,7 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addMessage(text, role) {
     const wrapper = document.createElement("div");
-    wrapper.className = `message ${role}`;
+    wrapper.className = `message ${role} enter`;
     
     let contentHtml = `<p>${escapeHtml(text)}</p>`;
     
@@ -347,11 +419,58 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
     chatMessages.appendChild(wrapper);
     wrapper.scrollIntoView({ behavior: "smooth", block: "end" });
+    window.setTimeout(() => wrapper.classList.remove("enter"), 320);
   }
 
-  function speakText(text, toneOverride = null) {
+  function showTypingIndicator() {
+    if (!chatMessages) return;
+    if (document.getElementById("chat-typing-indicator")) return;
+    const wrapper = document.createElement("div");
+    wrapper.id = "chat-typing-indicator";
+    wrapper.className = "message assistant typing-indicator enter";
+    wrapper.innerHTML = `
+      <div class="bubble">
+        <div class="typing-dots" aria-label="Assistant is typing">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    `;
+    chatMessages.appendChild(wrapper);
+    wrapper.scrollIntoView({ behavior: "smooth", block: "end" });
+    window.setTimeout(() => wrapper.classList.remove("enter"), 320);
+  }
+
+  function hideTypingIndicator() {
+    const typing = document.getElementById("chat-typing-indicator");
+    if (typing) typing.remove();
+  }
+
+  function updateChatInputAnimationState() {
+    if (!chatInput || !chatSendBtn) return;
+    const hasText = chatInput.value.trim().length > 0;
+    chatSendBtn.classList.toggle("has-text", hasText);
+  }
+
+  function setChatCharacterSpeaking(isSpeaking, mood = null) {
+    if (!chatCharacterOverlay) return;
+    chatCharacterOverlay.classList.toggle("visible", Boolean(isSpeaking));
+    const avatar = chatCharacterOverlay.querySelector(".chat-character-avatar span");
+    const label = chatCharacterOverlay.querySelector(".chat-character-text");
+    if (!avatar || !label) return;
+    if (!isSpeaking) return;
+    const normalized = normalizeMood(mood);
+    if (normalized === "happy") avatar.textContent = "😊";
+    else if (normalized === "sad") avatar.textContent = "🤍";
+    else if (normalized === "anxious") avatar.textContent = "🌿";
+    else if (normalized === "stressed") avatar.textContent = "🕊️";
+    else avatar.textContent = "🧘";
+    label.textContent = "Krishna is guiding you...";
+  }
+
+  function speakText(text, toneOverride = null, moodHint = null) {
     if (!ttsEnabled || !("speechSynthesis" in window) || !text) {
       console.log("TTS disabled or not supported or no text.");
+      setChatCharacterSpeaking(false);
       return;
     }
     
@@ -359,10 +478,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const allVoices = window.speechSynthesis.getVoices();
     if (allVoices.length === 0) {
       console.log("Voices not loaded yet, waiting...");
-      window.speechSynthesis.addEventListener("voiceschanged", () => speakText(text, toneOverride), { once: true });
+      window.speechSynthesis.addEventListener("voiceschanged", () => speakText(text, toneOverride, moodHint), { once: true });
       return;
     }
 
+    setChatCharacterSpeaking(false);
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     const activeTone = toneOverride || voiceProfile;
@@ -404,13 +524,17 @@ document.addEventListener("DOMContentLoaded", () => {
       utterance.voice = selectedVoice;
       utterance.lang = selectedVoice.lang;
     }
-    
+    utterance.onstart = () => setChatCharacterSpeaking(true, moodHint);
+    utterance.onend = () => setChatCharacterSpeaking(false);
+    utterance.onerror = () => setChatCharacterSpeaking(false);
+
     window.speechSynthesis.speak(utterance);
   }
 
   function updateChatMoodMonitor(mood, risk) {
     if (!chatMoodMonitor) return;
-    const safeMood = mood || "--";
+    const normalized = normalizeMood(mood);
+    const safeMood = normalized ? `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}` : "--";
     const safeRisk = Number.isFinite(Number(risk)) ? Math.round(Number(risk)) : "--";
     chatMoodMonitor.textContent = `Mood: ${safeMood} | Risk: ${safeRisk}`;
     const isHigh = Number.isFinite(Number(risk)) && Number(risk) >= 70;
@@ -431,6 +555,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if ((highRisk || risingFast) && stressedMood && enoughGap) {
       const checkin = "Quick check-in: I noticed things feel a bit intense right now. Would you like to do a quick breathing exercise to reset?";
+      breathingOfferPending = true;
       
       const wrapper = document.createElement("div");
       wrapper.className = "message assistant";
@@ -438,7 +563,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="bubble">
           <p>${escapeHtml(checkin)}</p>
           <div class="message-actions">
-            <button class="mini-tool-btn" onclick="window.openGameWorkspace('breathe-focus')">Yes, let's breathe</button>
+            <button class="mini-tool-btn" onclick="window.openBreathingExercisePopup()">Yes, let's breathe</button>
             <button class="mini-tool-btn secondary" onclick="this.closest('.message').remove()">No, I am fine</button>
           </div>
           <small>${currentTime()}</small>
@@ -447,7 +572,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chatMessages.appendChild(wrapper);
       wrapper.scrollIntoView({ behavior: "smooth", block: "end" });
 
-      speakText(checkin, voiceFromCondition("anxious", Math.max(70, numericRisk)));
+      speakText(checkin, voiceFromCondition("anxious", Math.max(70, numericRisk)), "anxious");
       chatContext.push({ role: "assistant", content: checkin });
       assistantTurnCount += 1;
       lastCheckinTurn = assistantTurnCount;
@@ -559,6 +684,79 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function getApiCandidates() {
+    const candidates = [];
+    if (API_BASE) candidates.push(API_BASE);
+    else candidates.push("");
+    if (runningOnLocalhost) {
+      if (!candidates.includes("http://localhost:5000")) candidates.push("http://localhost:5000");
+      if (!candidates.includes("http://localhost:5001")) candidates.push("http://localhost:5001");
+    }
+    return candidates;
+  }
+
+  async function hasReachableApi() {
+    const candidates = getApiCandidates();
+    for (const base of candidates) {
+      try {
+        const response = await fetch(`${base}/health`, {
+          method: "GET",
+          credentials: "include"
+        });
+        if (response.ok) {
+          if (base && base !== API_BASE) {
+            localStorage.setItem("wellness_api_base", base);
+          }
+          return true;
+        }
+      } catch (_) {
+        // Try the next candidate.
+      }
+    }
+    return false;
+  }
+
+  async function postChatWithApiFallback(text, history) {
+    const candidates = getApiCandidates();
+
+    let lastError = null;
+    for (const base of candidates) {
+      try {
+        const response = await fetch(`${base}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ text, history })
+        });
+
+        if (response.status === 401) {
+          return { unauthorized: true };
+        }
+
+        const payload = await readJsonSafe(response);
+        if (!response.ok) {
+          const rawError = String(payload?.error || "");
+          const likelyWrongOrigin = rawError.includes("<!DOCTYPE") || rawError.includes("Cannot POST /chat");
+          if (likelyWrongOrigin && runningOnLocalhost) {
+            lastError = new Error("Wrong API origin for /chat");
+            continue;
+          }
+          throw new Error(payload?.error || "Failed to send message.");
+        }
+
+        if (base && base !== API_BASE) {
+          localStorage.setItem("wellness_api_base", base);
+        }
+
+        return { payload };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Unable to reach chat API.");
+  }
+
   async function handleSendMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
@@ -579,6 +777,28 @@ document.addEventListener("DOMContentLoaded", () => {
       updateVoiceProfile(preferences, true);
     }
 
+    const lowerInput = text.toLowerCase();
+    const affirmativeBreathing = /^(yes|yeah|yep|sure|ok|okay|y|haan|han|let'?s do it|please)\b/.test(lowerInput);
+    const declineBreathing = /^(no|nah|nope|not now|later)\b/.test(lowerInput);
+
+    if (breathingOfferPending && affirmativeBreathing) {
+      addMessage(text, "user");
+      chatContext.push({ role: "user", content: text });
+      chatInput.value = "";
+      breathingOfferPending = false;
+
+      const confirmMsg = "Great choice. Opening a 1-minute breathing exercise for you now.";
+      addMessage(confirmMsg, "assistant");
+      chatContext.push({ role: "assistant", content: confirmMsg });
+      speakText(confirmMsg, voiceFromCondition("anxious", 70), "anxious");
+      window.openBreathingExercisePopup();
+      return;
+    }
+
+    if (breathingOfferPending && declineBreathing) {
+      breathingOfferPending = false;
+    }
+
     addMessage(text, "user");
     chatContext.push({ role: "user", content: text });
     chatInput.value = "";
@@ -586,28 +806,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       if (chatContinueBtn) chatContinueBtn.classList.add("hidden");
-      const response = await fetch(`${API_BASE}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, history: chatContext })
-      });
-      if (response.status === 401) {
+      showTypingIndicator();
+      const result = await postChatWithApiFallback(text, chatContext);
+      if (result?.unauthorized) {
         redirectToLogin();
         return;
       }
+      const payload = result?.payload || {};
 
-      const payload = await readJsonSafe(response);
-      if (!response.ok) {
-        throw new Error(payload?.error || "Failed to send message.");
-      }
-
-      const isFallback = payload?.source === "fallback";
-      if (isFallback) {
-        setChatSafeMode(true, "Safe mode active: API key unavailable, using caring fixed replies.");
-      } else {
-        setChatSafeMode(false);
-        if (chatContinueBtn) chatContinueBtn.classList.remove("hidden");
-      }
+      // A successful API response means we're connected, even if backend used a safety fallback reply.
+      setChatSafeMode(false);
+      if (chatContinueBtn) chatContinueBtn.classList.remove("hidden");
 
       if (!preferences.theme && payload?.mood) {
         setTheme(themeFromMood(payload.mood), true);
@@ -617,37 +826,60 @@ document.addEventListener("DOMContentLoaded", () => {
         updateVoiceProfile(responseTone, true);
       }
 
-      // Update the global mood trend and dashboard meter based on AI analysis
-      if (payload?.risk !== undefined) {
-        const aiRisk = Math.round(Number(payload.risk));
-        moodTrend.push(aiRisk);
-        if (moodTrend.length > 7) moodTrend.shift(); // Keep last 7 data points
-        renderDashboardMood(); // Update the meter and chart
-        trackActivity(`Mood updated by AI: ${payload.mood} (Risk: ${aiRisk}%)`, "mood");
+      // Update dashboard from chat mood/risk in real time.
+      const detectedMood = normalizeMood(payload?.mood);
+      const moodScore = toMoodScoreFromRisk(payload?.risk);
+      if (moodScore !== null) {
+        moodTrend.push(moodScore);
+        moodTrendLabels.push(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+        if (moodTrend.length > 7) moodTrend.shift();
+        if (moodTrendLabels.length > 7) moodTrendLabels.shift();
+        latestMood = detectedMood || latestMood;
+        renderDashboardMood(moodTrendLabels);
+        trackActivity(
+          `Mood detected: ${detectedMood || "unknown"} (risk ${Math.round(Number(payload?.risk) || 0)}%)`,
+          "mood"
+        );
+        saveChatMoodLog(text, detectedMood, payload?.risk);
       }
 
+      hideTypingIndicator();
       const assistantReply = payload.reply || "I am here for you.";
       addMessage(assistantReply, "assistant");
       chatContext.push({ role: "assistant", content: assistantReply });
-      speakText(assistantReply, responseTone);
+      speakText(assistantReply, responseTone, payload?.mood);
       assistantTurnCount += 1;
       updateChatMoodMonitor(payload?.mood, payload?.risk);
       maybeMidConversationCheckin(payload?.mood, payload?.risk);
       incrementStat("messages", 1, "Chat session completed", "chat");
     } catch (error) {
+      hideTypingIndicator();
       if (chatContinueBtn) chatContinueBtn.classList.add("hidden");
-      setChatSafeMode(true, "Safe mode active: network/API issue, showing fixed supportive replies.");
+      const apiReachable = await hasReachableApi();
+      setChatSafeMode(!apiReachable, "Safe mode active: network/API issue, showing fixed supportive replies.");
       const fallback = fixedFallbackReply(text);
       addMessage(fallback.reply, "assistant");
-      speakText(fallback.reply, voiceFromCondition(fallback.mood, fallback.risk));
+      speakText(fallback.reply, voiceFromCondition(fallback.mood, fallback.risk), fallback.mood);
       chatContext.push({ role: "assistant", content: fallback.reply });
+      const fallbackScore = toMoodScoreFromRisk(fallback.risk);
+      if (fallbackScore !== null) {
+        moodTrend.push(fallbackScore);
+        moodTrendLabels.push(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+        if (moodTrend.length > 7) moodTrend.shift();
+        if (moodTrendLabels.length > 7) moodTrendLabels.shift();
+        latestMood = normalizeMood(fallback.mood) || latestMood;
+        renderDashboardMood(moodTrendLabels);
+        saveChatMoodLog(text, fallback.mood, fallback.risk);
+      }
       assistantTurnCount += 1;
       updateChatMoodMonitor(fallback.mood, fallback.risk);
       maybeMidConversationCheckin(fallback.mood, fallback.risk);
       console.error(error);
     } finally {
+      hideTypingIndicator();
       chatInput.disabled = false;
       chatInput.focus();
+      updateChatInputAnimationState();
     }
   }
 
@@ -665,12 +897,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (chatInput) {
+    chatInput.addEventListener("input", updateChatInputAnimationState);
+    chatInput.addEventListener("focus", () => chatForm?.classList.add("active"));
+    chatInput.addEventListener("blur", () => chatForm?.classList.remove("active"));
     chatInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         handleSendMessage();
       }
     });
+    updateChatInputAnimationState();
   }
 
   if (chatContinueBtn) {
@@ -695,10 +931,45 @@ document.addEventListener("DOMContentLoaded", () => {
     moodLabel.textContent = "Great";
   }
 
+  function normalizeMood(mood) {
+    const value = String(mood || "").toLowerCase().trim();
+    if (["happy", "sad", "anxious", "stressed", "okay"].includes(value)) return value;
+    return null;
+  }
+
+  function toMoodScoreFromRisk(risk) {
+    const numericRisk = Number(risk);
+    if (!Number.isFinite(numericRisk)) return null;
+    return Math.max(0, Math.min(100, Math.round(100 - numericRisk)));
+  }
+
   function moodState(value) {
-    if (value < 35) return "Low";
-    if (value < 70) return "Steady";
-    return "Great";
+    if (value < 20) return "Very Low";
+    if (value < 40) return "Low";
+    if (value < 60) return "Okay";
+    if (value < 80) return "Good";
+    return "Excellent";
+  }
+
+  function getDynamicDayLabels(count = 7) {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const labels = [];
+    const today = new Date();
+    for (let i = count - 1; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      labels.push(days[d.getDay()]);
+    }
+    return labels;
+  }
+
+  function formatTrendLabel(dateInput) {
+    const date = new Date(dateInput);
+    if (Number.isNaN(date.getTime())) return "Now";
+    if (window.innerWidth <= 640) {
+      return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
   function parseInputPreferences(text) {
@@ -834,7 +1105,7 @@ document.addEventListener("DOMContentLoaded", () => {
         labels: [],
         datasets: [
           {
-            label: "Risk",
+            label: "Mood Score",
             data: [],
             borderColor: "#3f62dc",
             backgroundColor: "rgba(95,130,255,0.20)",
@@ -857,7 +1128,14 @@ document.addEventListener("DOMContentLoaded", () => {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { color: "#657285", font: { weight: "600" } }
+            ticks: {
+              color: "#657285",
+              font: { weight: "600" },
+              autoSkip: true,
+              maxTicksLimit: window.innerWidth <= 640 ? 4 : 7,
+              maxRotation: 0,
+              minRotation: 0
+            }
           },
           y: {
             min: 0,
@@ -870,24 +1148,31 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function renderDashboardMood(labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+  function renderDashboardMood(labels = moodTrendLabels) {
     if (!moodTrend.length) {
-      moodTrend = [50, 50, 50, 50, 50, 50, 50];
+      moodTrend = [50];
+      moodTrendLabels = ["Now"];
     }
     const latest = moodTrend[moodTrend.length - 1];
     const average = Math.round(moodTrend.reduce((sum, v) => sum + v, 0) / moodTrend.length);
+    const safeLabels =
+      Array.isArray(labels) && labels.length === moodTrend.length
+        ? labels
+        : getDynamicDayLabels(moodTrend.length);
 
     dashboardMeterValue.textContent = String(latest);
-    dashboardMeterLabel.textContent = moodState(latest);
+    dashboardMeterLabel.textContent = latestMood
+      ? `${latestMood.charAt(0).toUpperCase()}${latestMood.slice(1)} (${moodState(latest)})`
+      : moodState(latest);
     dashboardMoodAvg.textContent = `Avg ${average}`;
     dashboardMeterRing.style.background = `conic-gradient(var(--accent) ${latest * 3.6}deg, #e3e8f1 0deg)`;
     ensureMoodChart();
     if (moodChart) {
-      moodChart.data.labels = labels;
+      moodChart.data.labels = safeLabels;
       moodChart.data.datasets[0].data = moodTrend;
       moodChart.update();
     }
-    updateMoodScoreStatFromRiskTrend(moodTrend);
+    updateMoodScoreStatFromMoodTrend(moodTrend);
   }
 
   function setTtsUi() {
@@ -926,21 +1211,156 @@ document.addEventListener("DOMContentLoaded", () => {
   // Set interval to rotate quote every 30 seconds
   setInterval(rotateQuote, 30000);
 
+  function computeRiskSummary(history) {
+    if (!history.length) {
+      return {
+        avgRisk: 0,
+        maxRisk: 0,
+        minRisk: 0,
+        latestRisk: 0,
+        latestMoodLabel: "N/A",
+        totalLogs: 0,
+        moodCount: { happy: 0, sad: 0, anxious: 0, stressed: 0 }
+      };
+    }
+
+    const risks = history.map((item) => Math.max(0, Math.min(100, Number(item.risk) || 0)));
+    const moodCount = { happy: 0, sad: 0, anxious: 0, stressed: 0 };
+    history.forEach((item) => {
+      const mood = normalizeMood(item.mood);
+      if (mood && Object.prototype.hasOwnProperty.call(moodCount, mood)) {
+        moodCount[mood] += 1;
+      }
+    });
+
+    const latest = history[0];
+    const latestRisk = Math.max(0, Math.min(100, Number(latest?.risk) || 0));
+    const latestMoodLabel = normalizeMood(latest?.mood) || "N/A";
+
+    return {
+      avgRisk: Math.round(risks.reduce((sum, value) => sum + value, 0) / risks.length),
+      maxRisk: Math.max(...risks),
+      minRisk: Math.min(...risks),
+      latestRisk,
+      latestMoodLabel,
+      totalLogs: history.length,
+      moodCount
+    };
+  }
+
+  function buildDoctorReportHtml() {
+    const generatedAt = new Date();
+    const username = currentUser?.username || currentUsernameLabel?.textContent || "User";
+    const userId = currentUser?.userId || (userIdLabel?.textContent || "id: --").replace(/^id:\s*/i, "");
+    const chartImage = dashboardMoodChartCanvas?.toDataURL("image/png") || "";
+    const summary = computeRiskSummary(latestHistory);
+    const reportRows = latestHistory
+      .slice(0, 40)
+      .map((item) => {
+        const risk = Math.max(0, Math.min(100, Number(item.risk) || 0));
+        const mood = normalizeMood(item.mood) || "unknown";
+        const dateText = formatHistoryDate(item.date);
+        const notes = escapeHtml(item.summary || "");
+        return `
+          <tr>
+            <td>${escapeHtml(dateText)}</td>
+            <td>${escapeHtml(mood)}</td>
+            <td>${risk}/100</td>
+            <td>${notes}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wellness Clinical Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+    h1 { margin: 0 0 6px; }
+    .muted { color: #5b687c; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0 18px; }
+    .card { border: 1px solid #d8dfea; border-radius: 10px; padding: 12px; }
+    .label { font-size: 12px; color: #66748b; text-transform: uppercase; font-weight: bold; }
+    .value { font-size: 20px; font-weight: bold; margin-top: 4px; }
+    .chart-wrap { border: 1px solid #d8dfea; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid #d8dfea; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #f5f7fb; }
+    .foot { margin-top: 14px; font-size: 12px; color: #5b687c; }
+    @media print { body { margin: 10mm; } }
+  </style>
+</head>
+<body>
+  <h1>Wellness Hub Clinical Report</h1>
+  <div class="muted">Generated: ${escapeHtml(generatedAt.toLocaleString())}</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Patient Username</div><div class="value">${escapeHtml(username)}</div></div>
+    <div class="card"><div class="label">Patient ID</div><div class="value">${escapeHtml(userId)}</div></div>
+    <div class="card"><div class="label">Total Mood Logs</div><div class="value">${summary.totalLogs}</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Latest Mood / Risk</div><div class="value">${escapeHtml(summary.latestMoodLabel)} / ${summary.latestRisk}</div></div>
+    <div class="card"><div class="label">Average Risk</div><div class="value">${summary.avgRisk}</div></div>
+    <div class="card"><div class="label">Risk Range</div><div class="value">${summary.minRisk} - ${summary.maxRisk}</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Happy</div><div class="value">${summary.moodCount.happy}</div></div>
+    <div class="card"><div class="label">Anxious</div><div class="value">${summary.moodCount.anxious}</div></div>
+    <div class="card"><div class="label">Stressed / Sad</div><div class="value">${summary.moodCount.stressed + summary.moodCount.sad}</div></div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="label">Mood Trend Chart</div>
+    ${chartImage ? `<img src="${chartImage}" alt="Mood trend chart" style="width:100%;max-height:320px;object-fit:contain;" />` : "<p>Chart unavailable</p>"}
+  </div>
+
+  <h3>Mood History Details</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Date/Time</th>
+        <th>Mood</th>
+        <th>Risk</th>
+        <th>Summary</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${reportRows || "<tr><td colspan='4'>No mood logs available.</td></tr>"}
+    </tbody>
+  </table>
+
+  <div class="foot">
+    This report is generated from user-entered/app-detected wellness logs and is intended to support clinical discussion.
+  </div>
+</body>
+</html>`;
+  }
+
   if (viewReportBtn) {
     viewReportBtn.addEventListener("click", () => {
-      const reportText = `Wellness Report\n\nMessages Sent: ${appState.stats.messages}\nMood Score: ${appState.stats.moodScore}\nGames Played: ${appState.stats.games}\n\nRecent Moods: ${moodTrend.join(", ")}`;
-      alert(reportText);
+      const html = buildDoctorReportHtml();
+      const preview = window.open("", "_blank");
+      if (!preview) return;
+      preview.document.write(html);
+      preview.document.close();
     });
   }
 
   if (downloadReportBtn) {
     downloadReportBtn.addEventListener("click", () => {
-      const reportText = `Wellness Hub Report\nGenerated: ${new Date().toLocaleString()}\n\nStats:\n- Messages: ${appState.stats.messages}\n- Mood: ${appState.stats.moodScore}\n- Games: ${appState.stats.games}\n\nMood Trend (last 7): ${moodTrend.join(", ")}`;
-      const blob = new Blob([reportText], { type: "text/plain" });
+      const html = buildDoctorReportHtml();
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "wellness-report.txt";
+      a.download = `wellness-clinical-report-${new Date().toISOString().slice(0, 10)}.html`;
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -1035,7 +1455,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const value = Number(moodRange.value);
     const summary = moodNote.value.trim() || `${moodState(value).toLowerCase()} check in`;
-    const mood = moodFromRisk(value);
+    const mood = moodFromScore(value);
+    const risk = Math.max(0, Math.min(100, 100 - value));
     setTheme(themeFromMood(mood), true);
     updateVoiceProfile(voiceFromMood(mood), true);
 
@@ -1047,7 +1468,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mood,
-          risk: value,
+          risk,
           summary,
           date: new Date().toISOString()
         })
@@ -1069,10 +1490,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  function moodFromRisk(risk) {
-    if (risk >= 75) return "happy";
-    if (risk >= 50) return "stressed";
-    if (risk >= 35) return "anxious";
+  function moodFromScore(score) {
+    if (score >= 75) return "happy";
+    if (score >= 55) return "stressed";
+    if (score >= 35) return "anxious";
     return "sad";
   }
 
@@ -1113,14 +1534,26 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateTrendFromHistory(items) {
     const sorted = [...items].sort((a, b) => new Date(a.date) - new Date(b.date));
     const recent = sorted.slice(-7);
-    const values = recent.map((item) => Math.max(0, Math.min(100, Number(item.risk) || 0)));
-    const labels = recent.map((item) =>
-      new Date(item.date).toLocaleDateString([], { month: "short", day: "numeric" })
-    );
+    const points = recent
+      .map((item) => {
+        const value = toMoodScoreFromRisk(item.risk);
+        if (value === null) return null;
+        const label = formatTrendLabel(item.date);
+        return { value, label };
+      })
+      .filter(Boolean);
+    const values = points.map((point) => point.value);
+    const labels = points.map((point) => point.label);
     if (values.length) {
       moodTrend = values;
+      moodTrendLabels = labels;
+      latestMood = normalizeMood(recent[recent.length - 1]?.mood) || latestMood;
+    } else {
+      moodTrend = [50];
+      moodTrendLabels = ["Now"];
+      latestMood = null;
     }
-    renderDashboardMood(labels.length ? labels : undefined);
+    renderDashboardMood(moodTrendLabels);
   }
 
   async function loadHistory() {
@@ -1139,11 +1572,36 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const history = Array.isArray(payload) ? payload : [];
+      latestHistory = [...history];
       renderHistory(history);
       updateTrendFromHistory(history);
     } catch (error) {
       console.error(error);
       renderDashboardMood();
+    }
+  }
+
+  async function saveChatMoodLog(text, mood, risk) {
+    const normalizedMood = normalizeMood(mood);
+    const normalizedRisk = Number.isFinite(Number(risk)) ? Math.round(Number(risk)) : null;
+    if (!normalizedMood || normalizedRisk === null) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/mood`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          mood: normalizedMood,
+          risk: normalizedRisk,
+          date: new Date().toISOString()
+        })
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+      }
+    } catch (_) {
+      // no-op: chat should continue even if mood log write fails
     }
   }
 
@@ -1203,7 +1661,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       localStorage.removeItem("wellness_reactive_state");
-      moodTrend = [50, 50, 50, 50, 50, 50, 50];
+      moodTrend = [50];
+      moodTrendLabels = ["Now"];
+      latestMood = null;
+      latestHistory = [];
       appState.stats = { messages: 0, moodScore: 0, songs: 0, games: 0 };
       appState.deltas = { messages: 0, moodScore: 0, songs: 0, games: 0 };
       appState.activities = [];
@@ -1385,34 +1846,281 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function stopBreathingTheme() {
+    if (breathingThemeAudio) {
+      try {
+        breathingThemeAudio.pause();
+      } catch (_) {
+        // no-op
+      }
+      breathingThemeAudio = null;
+    }
+
+    if (breathingYtPlayer) {
+      try {
+        breathingYtPlayer.stopVideo();
+      } catch (_) {
+        // no-op
+      }
+    }
+
+    if (!breathingThemeNodes) return;
+    const { droneA, droneB, lfo, lfoGain, master } = breathingThemeNodes;
+    try {
+      droneA.stop();
+      droneB.stop();
+      lfo.stop();
+    } catch (_) {
+      // no-op
+    }
+    droneA.disconnect();
+    droneB.disconnect();
+    lfo.disconnect();
+    lfoGain.disconnect();
+    master.disconnect();
+    breathingThemeNodes = null;
+  }
+
+  function ensureYoutubeApiReady() {
+    if (window.YT && window.YT.Player) {
+      return Promise.resolve(window.YT);
+    }
+    if (youtubeApiReadyPromise) return youtubeApiReadyPromise;
+
+    youtubeApiReadyPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+      if (!existing) {
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.async = true;
+        script.onerror = () => reject(new Error("Failed to load YouTube API script."));
+        document.head.appendChild(script);
+      }
+
+      const timeout = setTimeout(() => {
+        reject(new Error("YouTube API timed out."));
+      }, 12000);
+
+      const previousReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof previousReady === "function") previousReady();
+        clearTimeout(timeout);
+        resolve(window.YT);
+      };
+    });
+
+    return youtubeApiReadyPromise;
+  }
+
+  async function startYoutubeBreathingTheme() {
+    const youtubeId = "Ox0R9wZ8dJc";
+    const YTRef = await ensureYoutubeApiReady();
+
+    if (!breathingYtHost) {
+      breathingYtHost = document.createElement("div");
+      breathingYtHost.id = "breathing-yt-host";
+      breathingYtHost.style.position = "fixed";
+      breathingYtHost.style.width = "1px";
+      breathingYtHost.style.height = "1px";
+      breathingYtHost.style.opacity = "0";
+      breathingYtHost.style.pointerEvents = "none";
+      breathingYtHost.style.left = "-10000px";
+      breathingYtHost.style.top = "-10000px";
+      document.body.appendChild(breathingYtHost);
+    }
+
+    const playerReady = () =>
+      new Promise((resolve, reject) => {
+        breathingYtPlayer = new YTRef.Player("breathing-yt-host", {
+          height: "1",
+          width: "1",
+          videoId: youtubeId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            rel: 0,
+            loop: 1,
+            playlist: youtubeId
+          },
+          events: {
+            onReady: (event) => {
+              try {
+                event.target.setVolume(18);
+                event.target.playVideo();
+              } catch (_) {
+                // ignore
+              }
+              resolve();
+            },
+            onError: () => reject(new Error("YouTube player failed to load.")),
+          }
+        });
+      });
+
+    if (!breathingYtPlayer) {
+      await playerReady();
+    } else {
+      breathingYtPlayer.loadVideoById(youtubeId);
+      breathingYtPlayer.setVolume(18);
+      breathingYtPlayer.playVideo();
+    }
+  }
+
+  async function startBreathingTheme() {
+    if (!breathingThemeEnabled) return;
+    const ctx = ensureAudioContext();
+    await ctx.resume();
+    stopBreathingTheme();
+
+    // Highest priority: user-selected local audio file.
+    if (breathingCustomAudioUrl) {
+      try {
+        const customSelectedAudio = new Audio(breathingCustomAudioUrl);
+        customSelectedAudio.loop = true;
+        customSelectedAudio.volume = 0.14;
+        await customSelectedAudio.play();
+        breathingThemeAudio = customSelectedAudio;
+        if (breathingPhase) breathingPhase.textContent = "Inhale • Selected theme";
+        return;
+      } catch (error) {
+        console.warn("Selected breathing audio could not play. Falling back.", error?.message || error);
+      }
+    }
+
+    // Default: use the same Piano procedural sound from the Music section.
+    try {
+      const buffers = ensureSoundBuffers();
+      const source = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      source.buffer = buffers.piano;
+      source.loop = true;
+      gain.gain.value = 0.16;
+      source.connect(gain);
+      gain.connect(ctx.destination);
+      source.start();
+      breathingThemeBufferSource = source;
+      breathingThemeBufferGain = gain;
+      if (breathingPhase) breathingPhase.textContent = "Inhale • Piano theme";
+      return;
+    } catch (error) {
+      console.warn("Piano default theme unavailable. Continuing fallback chain.", error?.message || error);
+    }
+
+    // Default bundled breathing track (if available in project assets).
+    try {
+      const defaultAudio = new Audio(DEFAULT_BREATHING_AUDIO_URL);
+      defaultAudio.loop = true;
+      defaultAudio.volume = 0.12;
+      await defaultAudio.play();
+      breathingThemeAudio = defaultAudio;
+      if (breathingPhase) breathingPhase.textContent = "Inhale • Default theme";
+      return;
+    } catch (_) {
+      // continue fallback chain
+    }
+
+    // Preferred: user-provided local Mahabharat theme file (copyright-safe on user's own machine).
+    // Place file at: /assets/audio/bhakti-hi-shakti-hai.mp3
+    try {
+      const customPath = "/assets/audio/bhakti-hi-shakti-hai.mp3";
+      const customAudio = new Audio(customPath);
+      customAudio.loop = true;
+      customAudio.volume = 0.12;
+      await customAudio.play();
+      breathingThemeAudio = customAudio;
+      if (breathingPhase) breathingPhase.textContent = "Inhale • Bhakti theme";
+      return;
+    } catch (error) {
+      console.warn("Custom breathing theme not loaded from /assets/audio/bhakti-hi-shakti-hai.mp3. Using ambient fallback.", error?.message || error);
+      // Next fallback: user-provided YouTube source, then procedural ambient drone.
+    }
+
+    try {
+      await startYoutubeBreathingTheme();
+      if (breathingPhase) breathingPhase.textContent = "Inhale • Bhakti theme";
+      return;
+    } catch (error) {
+      console.warn("YouTube breathing theme could not start. Using ambient fallback.", error?.message || error);
+    }
+
+    // Low-volume meditative drone inspired by epic Indian tonal ambience.
+    const droneA = ctx.createOscillator();
+    const droneB = ctx.createOscillator();
+    const master = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+
+    droneA.type = "sine";
+    droneB.type = "triangle";
+    droneA.frequency.value = 130.81; // Sa-like base
+    droneB.frequency.value = 196.0;  // Pa-like support
+
+    filter.type = "lowpass";
+    filter.frequency.value = 620;
+    filter.Q.value = 0.9;
+
+    master.gain.value = 0;
+    lfo.frequency.value = 0.08;
+    lfoGain.gain.value = 0.01;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(master.gain);
+
+    droneA.connect(filter);
+    droneB.connect(filter);
+    filter.connect(master);
+    master.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(0.028, now + 1.8);
+
+    droneA.start();
+    droneB.start();
+    lfo.start();
+
+    breathingThemeNodes = { droneA, droneB, lfo, lfoGain, master };
+  }
+
   function hideAllGameScreens() {
     document.querySelectorAll(".game-screen").forEach((screen) => screen.classList.add("hidden"));
   }
 
-  function openGameWorkspace(gameId) {
+  function openGameModalShell() {
     if (!gameWorkspace) return;
-    
-    // Open in a popup window
-    const popupWidth = 800;
-    const popupHeight = 600;
-    const left = (window.screen.width / 2) - (popupWidth / 2);
-    const top = (window.screen.height / 2) - (popupHeight / 2);
-    
-    // Create a temporary container for the game if we were to open it in a real window
-    // But since this is a single page app, we'll simulate a centered "popup" modal
     gameWorkspace.classList.remove("hidden");
+    gameWorkspace.classList.add("modal-open");
     gameWorkspace.style.position = "fixed";
     gameWorkspace.style.zIndex = "10000";
     gameWorkspace.style.top = "50%";
     gameWorkspace.style.left = "50%";
     gameWorkspace.style.transform = "translate(-50%, -50%)";
-    gameWorkspace.style.width = "90vw";
-    gameWorkspace.style.maxWidth = "1000px";
-    gameWorkspace.style.height = "85vh";
+    gameWorkspace.style.width = "min(980px, 94vw)";
+    gameWorkspace.style.height = "min(86vh, 760px)";
     gameWorkspace.style.boxShadow = "0 20px 50px rgba(0,0,0,0.3)";
     gameWorkspace.style.borderRadius = "20px";
     gameWorkspace.style.overflow = "hidden";
     gameWorkspace.style.background = "var(--surface)";
+  }
+
+  function closeGameModalShell() {
+    if (!gameWorkspace) return;
+    gameWorkspace.classList.add("hidden");
+    gameWorkspace.classList.remove("modal-open");
+    gameWorkspace.removeAttribute("style");
+    clearTimeout(reactionTimer);
+    clearInterval(rhythmInterval);
+    clearInterval(balloonInterval);
+  }
+
+  function openGameWorkspace(gameId) {
+    if (!gameWorkspace) return;
+    openGameModalShell();
 
     hideAllGameScreens();
 
@@ -1496,16 +2204,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (gameId === "box-breathing") {
-      document.getElementById("game-screen-box-breathing")?.classList.remove("hidden");
-      gameWorkspaceTitle.textContent = "Box Breathing";
-      gameWorkspaceSubtitle.textContent = "Follow the 4-4-4-4 pattern.";
-      initBoxBreathing();
-      incrementStat("games", 1, "Started Box Breathing", "game");
-      gameWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
     if (gameId === "affirmation-swipe") {
       document.getElementById("game-screen-affirmation-swipe")?.classList.remove("hidden");
       gameWorkspaceTitle.textContent = "Affirmation Swipe";
@@ -1522,16 +2220,6 @@ document.addEventListener("DOMContentLoaded", () => {
       gameWorkspaceSubtitle.textContent = "Record your positive moments.";
       initGratitudeJournal();
       incrementStat("games", 1, "Started Gratitude Journal", "game");
-      gameWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
-    if (gameId === "water-plant") {
-      document.getElementById("game-screen-water-plant")?.classList.remove("hidden");
-      gameWorkspaceTitle.textContent = "Water a Plant";
-      gameWorkspaceSubtitle.textContent = "Care for your virtual succulent.";
-      initWaterPlant();
-      incrementStat("games", 1, "Started Water a Plant", "game");
       gameWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -1556,16 +2244,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (gameId === "shape-arrange") {
-      document.getElementById("game-screen-shape-arrange")?.classList.remove("hidden");
-      gameWorkspaceTitle.textContent = "Shape Arrange";
-      gameWorkspaceSubtitle.textContent = "Arrange pieces to fill the box.";
-      initShapeArrange();
-      incrementStat("games", 1, "Started Shape Arrange", "game");
-      gameWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
     if (gameId === "positive-quiz") {
       document.getElementById("game-screen-positive-quiz")?.classList.remove("hidden");
       gameWorkspaceTitle.textContent = "Positive Quiz";
@@ -1582,16 +2260,6 @@ document.addEventListener("DOMContentLoaded", () => {
       gameWorkspaceSubtitle.textContent = "Create your own calm soundscape.";
       initRelaxingBeats();
       incrementStat("games", 1, "Started Relaxing Beats", "game");
-      gameWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
-    if (gameId === "grow-tree") {
-      document.getElementById("game-screen-grow-tree")?.classList.remove("hidden");
-      gameWorkspaceTitle.textContent = "Grow a Tree";
-      gameWorkspaceSubtitle.textContent = "Nurture your tree to maturity.";
-      initGrowTree();
-      incrementStat("games", 1, "Started Grow a Tree", "game");
       gameWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -1617,11 +2285,29 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (gameId === "breathe-focus") {
-      document.getElementById("view-games")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      closeGameModalShell();
+      window.switchView("dashboard");
+      document.querySelector("#view-dashboard .breathing-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
       stopBreathingSession(false);
       startBreathingSession();
       incrementStat("games", 1, "Started Breathe & Focus", "game");
+      return;
     }
+
+    gameWorkspaceTitle.textContent = "Game Unavailable";
+    gameWorkspaceSubtitle.textContent = "This game is being improved. Please try another one.";
+    closeGameModalShell();
+    alert("This game is currently unavailable. Please try another game.");
+  }
+
+  function openBreathingExercisePopup() {
+    const proceed = window.confirm("Start 1-minute breathing exercise now?");
+    if (!proceed) return;
+    breathingOfferPending = false;
+    window.switchView("dashboard");
+    document.querySelector("#view-dashboard .breathing-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    stopBreathingSession(false);
+    startBreathingSession();
   }
 
   function isSolvable(tiles) {
@@ -1794,42 +2480,59 @@ document.addEventListener("DOMContentLoaded", () => {
     const area = document.getElementById("reaction-area");
     const prompt = document.getElementById("reaction-prompt");
     const scoreEl = document.getElementById("reaction-score");
-    if (!area || !prompt) return;
+    const bestEl = document.getElementById("reaction-best");
+    if (!area || !prompt || !scoreEl || !bestEl) return;
 
     clearTimeout(reactionTimer);
-    area.className = "reaction-area waiting";
-    prompt.textContent = "Wait for Green...";
+    if (area._reactionPointerHandler) {
+      area.removeEventListener("pointerdown", area._reactionPointerHandler);
+    }
+
     reactionScore = 0;
     scoreEl.textContent = "Score: 0";
+    bestEl.textContent = Number.isFinite(reactionBest) ? `Best: ${reactionBest}ms` : "Best: 0ms";
+    let ready = false;
+
+    const setWaitingState = (message = "Wait for Green...") => {
+      ready = false;
+      area.classList.remove("ready");
+      area.classList.add("waiting");
+      prompt.textContent = message;
+    };
 
     const startReaction = () => {
       const delay = 2000 + Math.random() * 3000;
       reactionTimer = setTimeout(() => {
-        area.className = "reaction-area ready";
+        ready = true;
+        area.classList.remove("waiting");
+        area.classList.add("ready");
         prompt.textContent = "TAP NOW!";
         reactionStartTime = Date.now();
       }, delay);
     };
 
-    area.onclick = () => {
-      if (area.classList.contains("waiting")) {
+    const handleTap = (event) => {
+      event.preventDefault();
+      if (!ready) {
         clearTimeout(reactionTimer);
-        prompt.textContent = "Too early! Resetting...";
-        setTimeout(startReaction, 1000);
-      } else if (area.classList.contains("ready")) {
+        setWaitingState("Too early! Resetting...");
+        setTimeout(startReaction, 900);
+      } else {
         const reactionTime = Date.now() - reactionStartTime;
         reactionScore++;
         scoreEl.textContent = `Score: ${reactionScore}`;
-        if (reactionTime < reactionBest) {
+        if (!Number.isFinite(reactionBest) || reactionTime < reactionBest) {
           reactionBest = reactionTime;
-          document.getElementById("reaction-best").textContent = `Best: ${reactionBest}ms`;
+          bestEl.textContent = `Best: ${reactionBest}ms`;
         }
-        prompt.textContent = `${reactionTime}ms! Wait...`;
-        area.className = "reaction-area waiting";
+        setWaitingState(`${reactionTime}ms! Wait...`);
         startReaction();
       }
     };
 
+    area._reactionPointerHandler = handleTap;
+    area.addEventListener("pointerdown", handleTap);
+    setWaitingState();
     startReaction();
   }
 
@@ -2284,8 +2987,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (gameWorkspaceClose) {
-      gameWorkspaceClose.addEventListener("click", () => gameWorkspace?.classList.add("hidden"));
+      gameWorkspaceClose.addEventListener("click", closeGameModalShell);
     }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && gameWorkspace && !gameWorkspace.classList.contains("hidden")) {
+        closeGameModalShell();
+      }
+    });
 
     if (mindPuzzleReset) {
       mindPuzzleReset.addEventListener("click", initMindPuzzle);
@@ -2358,6 +3067,7 @@ document.addEventListener("DOMContentLoaded", () => {
     breathingTickInterval = null;
     breathingPhaseInterval = null;
     breathingTimeout = null;
+    stopBreathingTheme();
 
     if (!breathingStartBtn || !breathingTimer || !breathingPhase || !breathingCircle) return;
     breathingStartBtn.disabled = false;
@@ -2381,6 +3091,9 @@ document.addEventListener("DOMContentLoaded", () => {
     breathingStartBtn.textContent = "Running...";
     breathingTimer.textContent = formatSeconds(remaining);
     applyBreathingPhase(currentPhase);
+    startBreathingTheme().catch((error) => {
+      console.warn("Breathing theme could not start:", error?.message || error);
+    });
 
     breathingTickInterval = setInterval(() => {
       remaining -= 1;
@@ -2403,6 +3116,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ttsEnabled = !ttsEnabled;
       if (!ttsEnabled && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
+        setChatCharacterSpeaking(false);
       }
       setTtsUi();
     });
@@ -2421,6 +3135,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupSpeechToText();
   setupRelaxingPlayer();
   setupGames();
+  window.openGameWorkspace = openGameWorkspace;
+  window.openBreathingExercisePopup = openBreathingExercisePopup;
   themeButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const selectedTheme = button.dataset.themeChoice;
@@ -2434,6 +3150,30 @@ document.addEventListener("DOMContentLoaded", () => {
       startBreathingSession();
     });
   }
+  if (breathingAudioEnabledInput) {
+    breathingAudioEnabledInput.checked = breathingThemeEnabled;
+    breathingAudioEnabledInput.addEventListener("change", () => {
+      breathingThemeEnabled = Boolean(breathingAudioEnabledInput.checked);
+      localStorage.setItem("wellness_breathing_theme_enabled", breathingThemeEnabled ? "true" : "false");
+      if (!breathingThemeEnabled) {
+        stopBreathingTheme();
+      }
+    });
+  }
+  if (breathingAudioApplyBtn && breathingAudioFileInput) {
+    breathingAudioApplyBtn.addEventListener("click", () => {
+      const file = breathingAudioFileInput.files?.[0];
+      if (!file) {
+        alert("Please choose an audio file first.");
+        return;
+      }
+      if (breathingCustomAudioUrl) {
+        URL.revokeObjectURL(breathingCustomAudioUrl);
+      }
+      breathingCustomAudioUrl = URL.createObjectURL(file);
+      alert(`Theme audio set: ${file.name}`);
+    });
+  }
   if (deleteDataBtn) {
     deleteDataBtn.addEventListener("click", deleteMyData);
   }
@@ -2445,3 +3185,25 @@ document.addEventListener("DOMContentLoaded", () => {
     if (ok) loadHistory();
   });
 });
+    if (breathingThemeBufferSource) {
+      try {
+        breathingThemeBufferSource.stop();
+      } catch (_) {
+        // no-op
+      }
+      try {
+        breathingThemeBufferSource.disconnect();
+      } catch (_) {
+        // no-op
+      }
+      breathingThemeBufferSource = null;
+    }
+
+    if (breathingThemeBufferGain) {
+      try {
+        breathingThemeBufferGain.disconnect();
+      } catch (_) {
+        // no-op
+      }
+      breathingThemeBufferGain = null;
+    }

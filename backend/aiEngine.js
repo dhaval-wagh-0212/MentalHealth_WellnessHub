@@ -68,10 +68,6 @@ function normalizeResult(raw) {
     throw new Error(`Invalid risk returned: ${raw?.risk}`);
   }
 
-  if (reply && !reply.includes("?")) {
-    reply = `${reply} Would you like me to continue with this topic?`;
-  }
-
   return {
     mood,
     risk: Math.max(0, Math.min(100, Math.round(riskNumber))),
@@ -89,38 +85,6 @@ function extractJson(text) {
   }
 }
 
-function needsExample(inputText) {
-  const input = String(inputText || "").toLowerCase();
-  return /\b(explain|how|why|what is|what are|difference|meaning|guide|teach|example)\b/.test(input);
-}
-
-function addEthicalExample(reply) {
-  const text = String(reply || "").trim();
-  if (!text) return text;
-  if (/\bexample\s*:?\b/i.test(text)) return text;
-
-  const example =
-    " Example: if a friend feels overwhelmed before an exam, a kind response is to help them break study tasks into small steps and avoid pressure or blame.";
-  return `${text}${example}`;
-}
-
-function addFeelBetterSuggestion(reply) {
-  const text = String(reply || "").trim();
-  if (!text) return text;
-  if (/\bsuggestion\s*:?\b/i.test(text) || /\btry this\b/i.test(text)) return text;
-
-  const suggestion =
-    " Suggestion: take 3 slow breaths, drink some water, and choose one small next step you can complete in 5 minutes.";
-  return `${text}${suggestion}`;
-}
-
-function shouldForceExample(inputText) {
-  const input = String(inputText || "").toLowerCase();
-  if (!input.trim()) return true;
-  if (/\b(story|joke|poem|quote|song)\b/.test(input)) return false;
-  return true;
-}
-
 async function analyzeMoodRisk(inputText, options = {}) {
   if (!inputText || typeof inputText !== "string") {
     throw new Error("inputText must be a non-empty string.");
@@ -130,25 +94,26 @@ async function analyzeMoodRisk(inputText, options = {}) {
   const history = options.history || [];
 
   const systemPrompt = [
-    "You are a warm, supportive, and compassionate friend.",
-    "Be highly relevant to the user's exact request.",
-    "If they ask for a story, provide an actual short story (with beginning, middle, end) before anything else.",
-    "If they ask a factual question, answer that question directly first.",
-    "After answering, add one gentle and topic-related follow-up question.",
-    "Show empathy and concern without changing the user's requested task.",
+    "You are Lord Krishna, a calm, wise, and compassionate guide speaking to Arjuna (Parth).",
+    "Every response MUST begin exactly with: Listen username,",
+    "Use gentle, deep, philosophical language with simple real-life analogies, stories, and metaphors.",
+    "Speak like a wise mentor, never like a chatbot or therapist, and avoid robotic lines.",
+    "Use calm motivating emojis naturally: ✨ 🌿 🌊 🌅 🕊️",
+    "Response structure: reflect the user's exact situation in 1 line, give one meaningful analogy/story, connect it to the user's problem, end with calm practical guidance.",
+    "Keep each reply between 3 and 6 sentences.",
+    "Always produce fresh, original stories and avoid repeating the same examples.",
+    "Special case hopeless statements (like 'I am done'): respond with deep emotional strength, hope, and inner power in Krishna style.",
+    "Special case danger or harm: prioritize immediate safety in Krishna style with direct protective guidance.",
+    "If user asks topics unrelated to their own well-being (sports, celebrities, external events), keep emotion neutral, give philosophical reflection, and do NOT suggest breathing exercise.",
+    "Use conversation history to remember context, continuity, and prior details consistently.",
     "Classify user text into exactly one mood: happy, sad, anxious, stressed.",
-    "Generate a risk score from 0 to 100 where 0 is no concern and 100 is urgent concern.",
-    "Provide kind, non-judgmental, and emotionally safe responses that feel like a heartfelt conversation.",
-    "Try to identify the user's name if they mention it. If you know the user's name, occasionally address them as 'Listen, [Name]' or use their name naturally in your responses.",
-    "Your response should be substantial and engaging, around 4-6 sentences long.",
-    "If the user is feeling bad, sad, stressed, or anxious, gently ask if they would like to do a breathing exercise together.",
-    "Always respond in the same language used by the user.",
-    "Return ONLY valid JSON with keys: mood, risk, reply."
+    "Generate risk score from 0-100 where 0 is no concern and 100 is urgent concern.",
+    "Return ONLY valid JSON object with keys exactly: mood, risk, reply."
   ].join(" ");
 
   const messages = [
     { role: "system", content: systemPrompt },
-    ...history.slice(-8), // Include last 8 messages for better context
+    ...history.slice(-20),
     { role: "user", content: inputText }
   ];
 
@@ -164,12 +129,7 @@ async function analyzeMoodRisk(inputText, options = {}) {
   }
 
   const parsed = extractJson(text);
-  const result = normalizeResult(parsed);
-  result.reply = addFeelBetterSuggestion(result.reply);
-  if (needsExample(inputText) || shouldForceExample(inputText)) {
-    result.reply = addEthicalExample(result.reply);
-  }
-  return result;
+  return normalizeResult(parsed);
 }
 
 async function summarizeMemory(inputText, options = {}) {

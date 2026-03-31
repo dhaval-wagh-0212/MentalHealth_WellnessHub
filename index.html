@@ -113,6 +113,29 @@
             </section>
           </div>
 
+          <section class="panel breathing-panel">
+            <div class="breathing-meta">
+              <h3>Breathing Exercise</h3>
+              <p>Follow the circle for one minute.</p>
+              <div id="breathing-phase" class="breathing-phase">Press start</div>
+              <div id="breathing-timer" class="breathing-timer">01:00</div>
+              <label class="breathing-audio-toggle">
+                <input id="breathing-audio-enabled" type="checkbox" checked>
+                Enable breathing theme music
+              </label>
+              <div class="breathing-audio-picker">
+                <input id="breathing-audio-file" type="file" accept="audio/*">
+                <button id="breathing-audio-apply" class="tool-btn" type="button">Use Selected Audio</button>
+              </div>
+              <button id="breathing-start" class="solid-btn" type="button">Start 1-Minute Session</button>
+            </div>
+            <div class="breathing-stage">
+              <div id="breathing-circle" class="breathing-circle">
+                <span>Breathe</span>
+              </div>
+            </div>
+          </section>
+
           <section class="panel">
             <h3>Recent Activity</h3>
             <div id="activity-list"></div>
@@ -136,6 +159,12 @@
             </div>
             <div id="chat-fixed-replies" class="chat-fixed-replies hidden"></div>
             <div id="chat-messages" class="chat-messages">
+            </div>
+            <div id="chat-character-overlay" class="chat-character-overlay" aria-hidden="true">
+              <div class="chat-character-avatar">
+                <span>🧘</span>
+              </div>
+              <p class="chat-character-text">Krishna is guiding you...</p>
             </div>
 
             <form id="chat-form" class="chat-input-area">
@@ -408,14 +437,6 @@
 
             <!-- Even More Games -->
             <article class="game-card">
-              <img src="https://images.unsplash.com/photo-1499209974431-9dac3adaf471?auto=format&fit=crop&w=1200&q=80" alt="Box breathing">
-              <div class="overlay"><label>Calm</label><h4>Box Breathing</h4></div>
-              <div class="game-body">
-                <p>4-4-4-4 rhythm for instant calm</p>
-                <button class="game-launch-btn" data-game="box-breathing" type="button">Play</button>
-              </div>
-            </article>
-            <article class="game-card">
               <img src="https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?auto=format&fit=crop&w=1200&q=80" alt="Affirmation swipe">
               <div class="overlay"><label>⭐ Priority</label><h4>Affirmation Swipe</h4></div>
               <div class="game-body">
@@ -429,14 +450,6 @@
               <div class="game-body">
                 <p>Write 3 things you're grateful for</p>
                 <button class="game-launch-btn" data-game="gratitude-journal" type="button">Play</button>
-              </div>
-            </article>
-            <article class="game-card">
-              <img src="https://images.unsplash.com/photo-1416870230247-d0e9a02c6761?auto=format&fit=crop&w=1200&q=80" alt="Water a plant">
-              <div class="overlay"><label>Nature</label><h4>Water a Plant</h4></div>
-              <div class="game-body">
-                <p>Daily care for your virtual plant 🌱</p>
-                <button class="game-launch-btn" data-game="water-plant" type="button">Play</button>
               </div>
             </article>
             <article class="game-card">
@@ -458,14 +471,6 @@
               </div>
             </article>
             <article class="game-card">
-              <img src="https://images.unsplash.com/photo-1518113161404-f58c4998822d?auto=format&fit=crop&w=1200&q=80" alt="Arrange shapes">
-              <div class="overlay"><label>Puzzle</label><h4>Shape Arrange</h4></div>
-              <div class="game-body">
-                <p>Fit the geometric shapes together</p>
-                <button class="game-launch-btn" data-game="shape-arrange" type="button">Play</button>
-              </div>
-            </article>
-            <article class="game-card">
               <img src="https://images.unsplash.com/photo-1513258496099-48168024adb0?auto=format&fit=crop&w=1200&q=80" alt="Positive thinking quiz">
               <div class="overlay"><label>Thought</label><h4>Positive Quiz</h4></div>
               <div class="game-body">
@@ -479,14 +484,6 @@
               <div class="game-body">
                 <p>Compose your own calming music</p>
                 <button class="game-launch-btn" data-game="relaxing-beats" type="button">Play</button>
-              </div>
-            </article>
-            <article class="game-card">
-              <img src="https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?auto=format&fit=crop&w=1200&q=80" alt="Grow a tree">
-              <div class="overlay"><label>Nature</label><h4>Grow a Tree</h4></div>
-              <div class="game-body">
-                <p>Nurture a tree from seed to canopy</p>
-                <button class="game-launch-btn" data-game="grow-tree" type="button">Play</button>
               </div>
             </article>
             <article class="game-card">
@@ -601,19 +598,6 @@
               <p id="balloon-instruction" class="game-message">Hold SPACE to inhale (inflate), Release to exhale</p>
             </div>
 
-            <div id="game-screen-box-breathing" class="game-screen hidden text-center">
-              <div class="box-breathing-container">
-                <div id="box-breathing-circle" class="box-breathing-circle"></div>
-                <p id="box-breathing-phase" class="game-message">Press start</p>
-                <div class="timer-config mb-4">
-                  <label for="box-breathing-duration">Minutes:</label>
-                  <input type="number" id="box-breathing-duration" value="1" min="1" max="10" class="mini-input">
-                </div>
-                <p id="box-breathing-timer" class="game-timer">00:00</p>
-              </div>
-              <button id="box-breathing-start" class="solid-btn">Start Session</button>
-            </div>
-
             <div id="game-screen-affirmation-swipe" class="game-screen hidden">
               <div class="swipe-container">
                 <div id="affirmation-card" class="affirmation-card">
@@ -639,15 +623,6 @@
               </div>
             </div>
 
-            <div id="game-screen-water-plant" class="game-screen hidden text-center">
-              <div class="plant-container">
-                <div id="plant" class="plant stage-1">🌱</div>
-                <div id="plant-pot" class="plant-pot"></div>
-              </div>
-              <p id="plant-message" class="game-message">Your plant is thirsty!</p>
-              <button id="water-plant-btn" class="solid-btn">Water Plant 💧</button>
-            </div>
-
             <div id="game-screen-find-odd" class="game-screen hidden">
               <div class="game-meta-line">
                 <span id="find-odd-score">Score: 0</span>
@@ -666,14 +641,6 @@
                 <div id="mandala-svg-container" class="mandala-svg-container">
                   <!-- SVG Mandala will be injected here -->
                 </div>
-              </div>
-            </div>
-
-            <div id="game-screen-shape-arrange" class="game-screen hidden">
-              <div class="shape-container">
-                <p class="game-message">Drag and drop the shapes to fit the frame.</p>
-                <div id="shape-frame" class="shape-frame"></div>
-                <div id="shape-pieces" class="shape-pieces"></div>
               </div>
             </div>
 
@@ -699,17 +666,6 @@
               </div>
             </div>
 
-            <div id="game-screen-grow-tree" class="game-screen hidden text-center">
-              <div class="tree-container">
-                <div id="tree" class="tree stage-0">🌱</div>
-              </div>
-              <p id="tree-message" class="game-message">Your tree needs care to grow.</p>
-              <div class="tree-actions">
-                <button id="tree-water-btn" class="tool-btn">Water 💧</button>
-                <button id="tree-sun-btn" class="tool-btn">Sun ☀️</button>
-              </div>
-            </div>
-
             <div id="game-screen-compliment-gen" class="game-screen hidden text-center">
               <div class="compliment-card card">
                 <p id="compliment-text" class="text-xl font-bold">You're doing great!</p>
@@ -722,21 +678,6 @@
                 <h4 id="challenge-title" class="font-bold mb-2">Daily Task</h4>
                 <p id="challenge-desc">Smile at 3 strangers today.</p>
                 <button id="complete-challenge-btn" class="solid-btn mt-4">Mark as Done</button>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel breathing-panel">
-            <div class="breathing-meta">
-              <h3>Breathing Exercise</h3>
-              <p>Follow the circle for one minute.</p>
-              <div id="breathing-phase" class="breathing-phase">Press start</div>
-              <div id="breathing-timer" class="breathing-timer">01:00</div>
-              <button id="breathing-start" class="solid-btn" type="button">Start 1-Minute Session</button>
-            </div>
-            <div class="breathing-stage">
-              <div id="breathing-circle" class="breathing-circle">
-                <span>Breathe</span>
               </div>
             </div>
           </section>

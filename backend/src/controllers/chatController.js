@@ -14,60 +14,52 @@ function fallbackMoodRiskReply(text) {
   let mood = "stressed";
   let risk = 55;
   let reply =
-    "Thank you for sharing this with me. You are not alone, and we can take this one gentle step at a time.";
+    "Listen username, I hear the weight you are carrying right now. Like a river that looks turbulent on the surface but remains deep and steady below, your inner strength is still present 🌊✨. Let us choose one small action for this moment and do it with full attention. Take one slow breath, relax your shoulders, and tell me the first step you can take now 🌿.";
 
   if (asksStory) {
     mood = "happy";
     risk = 25;
     reply =
-      "Once there was a tired student who planted a tiny seed every evening and called it hope. The first week, nothing changed, but they kept watering it with one small act of courage each day. One morning, a green sprout appeared, and the student realized growth was happening quietly all along. By the end of the month, that little plant had become a reminder that progress does not need to be loud to be real. Would you like a motivational story, a funny story, or a bedtime story next?";
+      "Listen username, you want a story, and your heart is asking for meaning in it. A young archer once practiced in the mist before sunrise, missing many shots, yet each dawn he returned with steadier breath and quieter eyes 🌅. One day the arrow flew true, not because fate changed, but because his discipline had ripened in silence. In the same way, your effort today is shaping tomorrow even when results seem hidden ✨.";
   } else if (asksJoke) {
     mood = "happy";
     risk = 20;
     reply =
-      "Here is one: Why did the calendar go to therapy? Because it felt too many dates were stressing it out. You are doing better than you think, and a little laughter can really help. Want another light joke or a short funny story?";
+      "Listen username, even your request for laughter is a sign your spirit still seeks light. A wise farmer once said, 'A smile is like rain on dry soil; it does not solve everything, but it helps life grow again' 🌿. Keep one corner of your day for joy, because a peaceful mind works better than a burdened one. If you wish, I can share another light one with the same warmth ✨.";
   } else if (asksAdvice) {
     mood = "stressed";
     risk = 58;
     reply =
-      "I hear you, and I am glad you asked for help. A good first step is to choose one tiny action you can finish in five minutes, then pause and breathe before the next step. This keeps your mind from feeling overloaded. What is one specific thing you are struggling with right now so I can suggest something more focused?";
+      "Listen username, asking for help is itself a courageous action. Think of carrying water in many pots at once; you spill everything, but with one pot in both hands, you reach safely 🕊️. Your mind is similar: choose one task, finish it, then move to the next. Tell me the one task that feels heaviest, and we will break it gently.";
   } else if (hasHappyWords && !hasAnxiousWords && !hasStressWords && !hasSadWords) {
     mood = "happy";
     risk = 20;
     reply =
-      "I am really glad to hear that. Keep nurturing what is helping you feel this way, even in small ways. What has helped you feel this good today?";
+      "Listen username, your calm energy is beautiful and worth protecting. Just as a lamp stays bright when shielded from harsh wind, your peace stays strong when you protect your routines ✨. Keep doing the small things that brought this balance today, and your mind will remain clear and steady 🌿.";
   } else if (hasSadWords) {
     mood = "sad";
     risk = 65;
     reply =
-      "I am sorry you are carrying this right now. Your feelings are valid, and I am here with you. A small pause and a few slow breaths can help in this moment. Do you want to talk about what made today feel hard?";
+      "Listen username, I can feel how heavy this moment is for you. When clouds gather, the sky does not disappear; it only waits behind them 🌥️. In the same way, your light has not gone, it is only covered for now. Sit for one minute, breathe slowly, and share the one thought that hurts most so we can untangle it together.";
   } else if (hasAnxiousWords) {
     mood = "anxious";
     risk = 72;
     reply =
-      "That sounds really heavy, and it makes sense to feel this way. Let us slow down together: inhale for 4, exhale for 6, for a few rounds. What thought is repeating in your mind the most right now?";
+      "Listen username, anxiety is like a horse running before the rider is ready. You do not beat the horse; you hold the reins with patience until it slows 🌿. Right now, take three long exhalations and let your body receive safety first. Then tell me the thought looping in your mind, and we will steady it step by step ✨.";
   } else if (hasStressWords) {
     mood = "stressed";
     risk = 68;
     reply =
-      "You have a lot on your plate right now. You are doing your best, and that matters. We can break this into one small next step. Which task feels most urgent to you at this moment?";
+      "Listen username, stress grows when everything shouts at once. Like a battlefield commander, clarity comes by choosing order: first, next, later 🌊. Write the top three tasks, begin only with the first for 15 focused minutes, and let the rest wait. Action with calm rhythm will serve you better than speed with fear.";
   } else {
     reply =
-      "Thank you for sharing this with me. I am here to support you, and we can handle this one step at a time. What kind of help would feel most useful right now?";
-  }
-
-  let enrichedReply = reply;
-  if (!/\bsuggestion\s*:?\b/i.test(enrichedReply)) {
-    enrichedReply = `${enrichedReply} Suggestion: take a short pause, do 3 slow breaths, and focus on one small next step.`;
-  }
-  if ((asksExplanation || !asksStory) && !/\bexample\b/i.test(enrichedReply)) {
-    enrichedReply = `${enrichedReply} Example: if someone feels stressed before a deadline, a kind approach is to prioritize one task, avoid self-blame, and ask for help early if needed.`;
+      "Listen username, I am with you in this moment. A tree becomes stable not by one giant root, but by many small roots growing daily 🌿. Let us choose one small grounded step now, and your confidence will follow naturally ✨. Tell me what you need most right now: clarity, calm, or direction.";
   }
 
   return {
     mood,
     risk,
-    reply: enrichedReply,
+    reply,
     source: "fallback",
     reason: "api_unavailable"
   };
