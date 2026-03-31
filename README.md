@@ -4,6 +4,28 @@ MentalHealth Wellness Hub is a full-stack wellness website designed to help user
 
 The platform brings several wellness tools into one place so users can move naturally between mood tracking, guided conversation, breathing support, music, and mindful mini-games.
 
+## Website Preview
+
+### Dashboard
+
+![Dashboard preview](assets/screenshots/dashboard.jpg)
+
+### AI Wellness Chat
+
+![Chat preview](assets/screenshots/chat.jpg)
+
+### Mood Tracker
+
+![Mood tracker preview](assets/screenshots/mood-tracker.jpg)
+
+### Relaxing Music
+
+![Music preview](assets/screenshots/music.jpg)
+
+### Wellness Games
+
+![Games preview](assets/screenshots/games.jpg)
+
 ## What The Website Offers
 
 - A personalized dashboard with activity stats, mood insights, and quick wellness access
